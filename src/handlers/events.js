@@ -11,6 +11,8 @@ export default async function loadEvents(client) {
     const eventsPath = join(__dirname, '../events');
     const eventFiles = await readdir(eventsPath).then(files => files.filter(file => file.endsWith('.js')));
 
+    logger.info(`Loading ${eventFiles.length} event files...`);
+
     for (const file of eventFiles) {
         const filePath = join(eventsPath, file);
         try {
@@ -31,13 +33,14 @@ export default async function loadEvents(client) {
             
             if (event.once) {
                 client.once(event.name, safeExecute);
+                logger.info(`✅ Loaded event (once): ${event.name}`);
             } else {
                 client.on(event.name, safeExecute);
+                logger.info(`✅ Loaded event: ${event.name}`);
             }
         } catch (error) {
             logger.error(`Error loading event ${file}:`, error);
         }
     }
 }
-
 
