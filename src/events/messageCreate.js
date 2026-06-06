@@ -4,11 +4,15 @@ import botConfig from '../config/bot.js';
 export default {
   name: 'messageCreate',
   async execute(message, client) {
+    // Log all messages to debug
+    logger.debug(`Message received from ${message.author.tag}: "${message.content}"`);
+
     // Ignore bot messages
     if (message.author.bot) return;
 
     // Get the prefix from config
     const prefix = botConfig.commands.prefix;
+    logger.debug(`Checking prefix: "${prefix}" in message: "${message.content}"`);
 
     // Check if message starts with prefix
     if (!message.content.startsWith(prefix)) return;
@@ -19,11 +23,14 @@ export default {
 
     if (!commandName) return;
 
+    logger.info(`Text command triggered: ${commandName}`);
+
     // Get the command from the collection
     const command = client.commands.get(commandName);
 
     if (!command) {
       // Silently ignore unknown commands
+      logger.debug(`Command not found: ${commandName}`);
       return;
     }
 
