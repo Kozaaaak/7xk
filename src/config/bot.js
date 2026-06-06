@@ -44,8 +44,8 @@ export const botConfig = {
     defaultCooldown: 3,
 
     // Text command prefix for message-based commands.
-    // Users can type "!help" instead of "/help"
-    prefix: process.env.BOT_PREFIX || "!",
+    // Users can type "+help" instead of "/help"
+    prefix: process.env.BOT_PREFIX || "+",
 
     // If true, old commands are removed before re-registering.
     deleteCommands: false,
