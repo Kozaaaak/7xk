@@ -41,7 +41,11 @@ export const botConfig = {
     owners: process.env.OWNER_IDS?.split(",") || [],
 
     // Default wait time between command uses (in seconds).
-    defaultCooldown: 3, 
+    defaultCooldown: 3,
+
+    // Text command prefix for message-based commands.
+    // Users can type "!help" instead of "/help"
+    prefix: process.env.BOT_PREFIX || "!",
 
     // If true, old commands are removed before re-registering.
     deleteCommands: false,
@@ -543,7 +547,3 @@ export function getRandomColor() {
 }
 
 export default botConfig;
-
-
-
-
