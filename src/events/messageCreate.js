@@ -1,117 +1,93 @@
-
-
-
-
-
-import { Events } from 'discord.js';
 import { logger } from '../utils/logger.js';
-import { getLevelingConfig, getUserLevelData } from '../services/leveling.js';
-import { addXp } from '../services/xpSystem.js';
-import { checkRateLimit } from '../utils/rateLimiter.js';
-
-const MESSAGE_XP_RATE_LIMIT_ATTEMPTS = 12;
-const MESSAGE_XP_RATE_LIMIT_WINDOW_MS = 10000;
+import botConfig from '../config/bot.js';
 
 export default {
-  name: Events.MessageCreate,
+  name: 'messageCreate',
   async execute(message, client) {
+    // Ignore bot messages
+    if (message.author.bot) return;
+
+    // Get the prefix from config
+    const prefix = botConfig.commands.prefix;
+
+    // Check if message starts with prefix
+    if (!message.content.startsWith(prefix)) return;
+
+    // Extract command and arguments
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const commandName = args.shift().toLowerCase();
+
+    if (!commandName) return;
+
+    // Get the command from the collection
+    const command = client.commands.get(commandName);
+
+    if (!command) {
+      // Silently ignore unknown commands
+      return;
+    }
+
     try {
-      
-      if (message.author.bot || !message.guild) return;
+      // Check if command has text mode support (optional)
+      if (command.textOnly === false) {
+        // Command doesn't support text mode
+        return message.reply({
+          content: `This command only supports slash commands (/${commandName}).`,
+          ephemeral: true
+        }).catch(err => logger.error('Failed to send error message:', err));
+      }
 
-      await handleLeveling(message, client);
+      // Log command execution
+      logger.info(`Text command executed: ${commandName} by ${message.author.tag} in ${message.guild?.name || 'DM'}`);
+
+      // Create a mock interaction-like object for consistency with slash commands
+      const textCommandContext = {
+        user: message.author,
+        guild: message.guild,
+        channel: message.channel,
+        member: message.member,
+        client: client,
+        reply: (options) => message.reply(options),
+        deferReply: async () => { /* No-op for text commands */ },
+        editReply: (options) => message.edit(options),
+        followUp: (options) => message.reply(options),
+        isCommand: () => true,
+        isTextCommand: () => true,
+      };
+
+      // Execute the command
+      if (typeof command.executeText === 'function') {
+        // Command has dedicated text handler
+        await command.executeText(textCommandContext, args);
+      } else if (typeof command.execute === 'function') {
+        // Fallback to regular execute method
+        // Convert args to options format for compatibility
+        const options = {
+          getSubcommand: () => null,
+          getSubcommandGroup: () => null,
+          getString: (name) => args[0],
+          getInteger: (name) => parseInt(args[0]),
+          getUser: (name) => message.mentions.users.first(),
+          getRole: (name) => message.mentions.roles.first(),
+          getChannel: (name) => message.mentions.channels.first(),
+        };
+
+        await command.execute(textCommandContext, options);
+      }
+
     } catch (error) {
-      logger.error('Error in messageCreate event:', error);
-    }
-  }
-};
+      logger.error(`Error executing text command ${commandName}:`, error);
+      
+      const errorMessage = {
+        content: `An error occurred while executing the command: ${error.message}`,
+        ephemeral: true
+      };
 
-
-
-
-
-
-
-
-async function handleLeveling(message, client) {
-  try {
-    const rateLimitKey = `xp-event:${message.guild.id}:${message.author.id}`;
-    const canProcess = await checkRateLimit(rateLimitKey, MESSAGE_XP_RATE_LIMIT_ATTEMPTS, MESSAGE_XP_RATE_LIMIT_WINDOW_MS);
-    if (!canProcess) {
-      return;
-    }
-
-    const levelingConfig = await getLevelingConfig(client, message.guild.id);
-    
-    if (!levelingConfig?.enabled) {
-      return;
-    }
-
-    
-    if (levelingConfig.ignoredChannels?.includes(message.channel.id)) {
-      return;
-    }
-
-    
-    if (levelingConfig.ignoredRoles?.length > 0) {
-      const member = await message.guild.members.fetch(message.author.id).catch(() => {
-        return null;
-      });
-      if (member && member.roles.cache.some(role => levelingConfig.ignoredRoles.includes(role.id))) {
-        return;
+      try {
+        await message.reply(errorMessage);
+      } catch (replyError) {
+        logger.error('Failed to send error reply:', replyError);
       }
     }
-
-    
-    if (levelingConfig.blacklistedUsers?.includes(message.author.id)) {
-      return;
-    }
-
-    
-    if (!message.content || message.content.trim().length === 0) {
-      return;
-    }
-
-    const userData = await getUserLevelData(client, message.guild.id, message.author.id);
-    
-    
-    const cooldownTime = levelingConfig.xpCooldown || 60;
-    const now = Date.now();
-    const timeSinceLastMessage = now - (userData.lastMessage || 0);
-    
-    
-    if (timeSinceLastMessage < cooldownTime * 1000) {
-      return;
-    }
-
-    
-    const minXP = levelingConfig.xpRange?.min || levelingConfig.xpPerMessage?.min || 15;
-    const maxXP = levelingConfig.xpRange?.max || levelingConfig.xpPerMessage?.max || 25;
-
-    
-    const safeMinXP = Math.max(1, minXP);
-    const safeMaxXP = Math.max(safeMinXP, maxXP);
-
-    
-    const xpToGive = Math.floor(Math.random() * (safeMaxXP - safeMinXP + 1)) + safeMinXP;
-
-    
-    let finalXP = xpToGive;
-    if (levelingConfig.xpMultiplier && levelingConfig.xpMultiplier > 1) {
-      finalXP = Math.floor(finalXP * levelingConfig.xpMultiplier);
-    }
-
-    
-    const result = await addXp(client, message.guild, message.member, finalXP);
-    
-    if (result.success && result.leveledUp) {
-      logger.info(
-        `${message.author.tag} leveled up to level ${result.level} in ${message.guild.name}`
-      );
-    }
-  } catch (error) {
-    logger.error('Error handling leveling for message:', error);
-  }
-}
-
-
+  },
+};
